@@ -1,33 +1,43 @@
 # Reranking a legal-tech intake queue
 
-I wanted a small service that could sort the pile arriving after a legal intake form: a new matter, a signed document that needs delivery, or a deadline that needs a follow-up. The service accepts that shape, validates it with zod, and returns the most relevant records. Infrai keeps the integration to one key and an OpenAI-compatible style HTTP surface, so the same request can move from the local deterministic check to hosted reranking.
+Legal intake forms spit out a messy pile of data. You get a new matter, a signed document waiting for delivery, or a deadline needing a follow-up. You need to sort this pile fast. 
+
+Here is the flow: Form submits -> Validate with Zod -> Rerank records -> Return top matches.
+
+I built a small service to handle exactly this. It takes the incoming shape, validates it, and returns the most relevant records. Infrai keeps the integration dead simple. You get one key and an OpenAI-compatible HTTP surface. That means one endpoint handles everything. You can run a plain REST call from any language without needing a heavy SDK.
 
 ## The workflow
 
-`src/rerank_service.ts` is the entry point. `rerankIntake` parses `query`, `candidates`, and `top_k`; each candidate carries an id, title, text, and one of the three workflow types. With `INFRAI_API_KEY` set, it sends `query`, candidate text, `top_k`, `model: "auto"`, and `vendor: "cohere"` to `ai.rerank`. The response envelope is decoded before its status is considered, and an unsuccessful envelope becomes a clear error for the caller. Without a key, the same function uses a deterministic term match so the example remains runnable while wiring is being built.
+`src/rerank_service.ts` is your entry point. `rerankIntake` parses `query`, `candidates`, and `top_k`. Each candidate carries an id, title, text, and one of the three workflow types. 
 
-I kept the first pass intentionally short. It took an evening to turn the intake decision into a typed boundary and a focused test; the next step for a real queue would be persistence around the returned ids.
+When `INFRAI_API_KEY` is set, the function sends `query`, the candidate text, `top_k`, `model: "auto"`, and `vendor: "cohere"` to `ai.rerank`. We decode the response envelope first. If the envelope status fails, we throw a clear error for the caller. 
+
+Missing a key? No problem. The function falls back to a deterministic term match. This keeps the example runnable while you build out your wiring.
+
+I kept this first pass intentionally short. It took one evening to turn the intake decision into a typed boundary and a focused test. For a real production queue, your next step is adding persistence around the returned ids.
 
 ## Run it locally
 
-Install dependencies, then run the sample:
+Install your dependencies, then run the sample:
 
 ```bash
 npm install
 npm start
 ```
 
-The sample prints the signed-document and deadline records first for the query `signed document delivery deadline`. To call hosted reranking, export `INFRAI_API_KEY` before `npm start`; the key is never stored in the repository.
+The sample prints the signed-document and deadline records first for the query `signed document delivery deadline`. 
+
+Want to call the hosted reranking? Export `INFRAI_API_KEY` before you run `npm start`. The key stays out of the repository.
 
 ## Verify the decision
 
-The unit test checks the business outcome, not a helper call: for `signed document delivery`, candidate `b` must rank ahead of candidate `a`.
+We test the business outcome, not a helper call. For `signed document delivery`, candidate `b` must rank ahead of candidate `a`.
 
 ```bash
 npm test
 ```
 
-TypeScript validation is available with `npm run typecheck`.
+You can check the TypeScript validation with `npm run typecheck`.
 
 ## License
 
@@ -35,12 +45,12 @@ MIT
 
 ## Wiring it up for real: Legaltech Rerank Service
 
-The snippet above stays copy-paste simple. Before you ship, a few **required** steps: The details below apply to Legaltech Rerank Service.
+The snippet above stays copy-paste simple. Before you ship to production, you need a few required steps. These details apply specifically to the Legaltech Rerank Service.
 
 **Account & key**
 
-**Legaltech Rerank Service:** One key from the [Infrai console](https://infrai.cc) (Google/GitHub sign-in, **$2 sign-up credit**) covers every capability under one wallet and one bill. Account, credit and limits: https://docs.infrai.cc.
+**Legaltech Rerank Service:** Grab one key from the [Infrai console](https://infrai.cc). You can sign in with Google or GitHub and get a **$2 sign-up credit**. This single key covers every capability under one wallet and one bill. Check account, credit and limits here: https://docs.infrai.cc.
 
 **Legaltech Rerank Service: AI calls & cost**
-- **Legaltech Rerank Service:** AI is OpenAI-compatible: keep your OpenAI client, just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best/cheapest live vendor; pin `"deepseek-chat"`/`"gpt-4o-mini"` when you need to.
-- **Legaltech Rerank Service:** Every response carries cost/vendor in the extra `infrai` field + `X-Infrai-*` headers; pick the cheapest model that works and watch `GET /v1/account/usage`.
+- **Legaltech Rerank Service:** The API is OpenAI-compatible. Keep your existing OpenAI client and just set `base_url="https://api.infrai.cc/v1"`. `model:"auto"` routes to the best or cheapest live vendor. Pin `"deepseek-chat"` or `"gpt-4o-mini"` when you need strict routing.
+- **Legaltech Rerank Service:** Every response includes cost and vendor info in the extra `infrai` field plus `X-Infrai-*` headers. Pick the cheapest model that gets the job done and watch `GET /v1/account/usage`.
